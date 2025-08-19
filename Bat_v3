@@ -1,0 +1,122 @@
+@echo off
+title [ HACKER MULTI TOOL v2.0 ]
+color 0a
+mode con: cols=100 lines=30
+
+:menu
+cls
+echo ============================================================
+echo             ███╗   ███╗██╗   ██╗██╗  ████████╗██╗
+echo             ████╗ ████║██║   ██║██║  ╚══██╔══╝██║
+echo             ██╔████╔██║██║   ██║██║     ██║   ██║
+echo             ██║╚██╔╝██║██║   ██║██║     ██║   ██║
+echo             ██║ ╚═╝ ██║╚██████╔╝███████╗██║   ██║
+echo             ╚═╝     ╚═╝ ╚═════╝ ╚══════╝╚═╝   ╚═╝
+echo ============================================================
+echo.
+echo [1] ดู IP / Network Info
+echo [2] เปลี่ยนวอลเปเปอร์จากลิงก์ (ภาพนิ่ง)
+echo [3] เปลี่ยนวอลเปเปอร์แบบวิดีโอ (VLC)
+echo [4] Shutdown / Restart / Logoff
+echo [5] เปิดเว็บลับ (YouTube, Google, ฯลฯ)
+echo [6] แกล้งเพื่อน (popup, cmd spam)
+echo [7] สร้างไฟล์ลับ (secret.txt)
+echo [8] Matrix Effect Mode
+echo [0] ออก
+echo.
+set /p choice=เลือกหมายเลข: 
+
+if %choice%==1 goto netinfo
+if %choice%==2 goto wallpaper
+if %choice%==3 goto videowall
+if %choice%==4 goto power
+if %choice%==5 goto websites
+if %choice%==6 goto prank
+if %choice%==7 goto secret
+if %choice%==8 goto matrix
+if %choice%==0 exit
+goto menu
+
+:netinfo
+cls
+echo [กำลังดึงข้อมูล Network...]
+ipconfig /all
+pause
+goto menu
+
+:wallpaper
+cls
+set /p link=ใส่ลิงก์ภาพ (jpg/png): 
+echo กำลังดาวน์โหลดภาพ...
+bitsadmin /transfer walljob /download /priority normal %link% "%temp%\wallpaper.jpg"
+reg add "HKCU\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "%temp%\wallpaper.jpg" /f
+RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
+echo วอลเปเปอร์ถูกเปลี่ยนแล้ว!
+pause
+goto menu
+
+:videowall
+cls
+echo *** วอลเปเปอร์วิดีโอ (VLC) ***
+set /p vlink=ใส่ไฟล์วิดีโอหรือ URL: 
+echo กำลังเปิด VLC Wallpaper Mode...
+start "" "C:\Program Files\VideoLAN\VLC\vlc.exe" "%vlink%" --video-wallpaper --qt-start-minimized --no-video-title-show --loop
+pause
+goto menu
+
+:power
+cls
+echo [1] Shutdown
+echo [2] Restart
+echo [3] Logoff
+set /p pwr=เลือก: 
+if %pwr%==1 shutdown -s -t 10
+if %pwr%==2 shutdown -r -t 10
+if %pwr%==3 shutdown -l
+goto menu
+
+:websites
+cls
+echo [1] YouTube
+echo [2] Google
+echo [3] Facebook
+echo [4] GitHub
+set /p site=เลือก: 
+if %site%==1 start https://www.youtube.com
+if %site%==2 start https://www.google.com
+if %site%==3 start https://www.facebook.com
+if %site%==4 start https://www.github.com
+goto menu
+
+:prank
+cls
+echo [1] Popup Spam
+echo [2] CMD Spam
+set /p prank=เลือก: 
+if %prank%==1 goto popup
+if %prank%==2 goto spam
+
+:popup
+for /l %%i in (1,1,20) do (
+    msg * "HACKED by Batch Tool!"
+)
+goto menu
+
+:spam
+:loop
+start cmd
+goto loop
+
+:secret
+cls
+echo รหัสลับ: %random%-%random%-%random% > secret.txt
+echo ไฟล์ secret.txt ถูกสร้างแล้ว!
+pause
+goto menu
+
+:matrix
+cls
+color 0a
+:matrixloop
+echo %random%%random%%random%%random%%random%%random%%random%%random%
+goto matrixloop
