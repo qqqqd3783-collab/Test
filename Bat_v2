@@ -1,0 +1,144 @@
+@echo off
+setlocal EnableDelayedExpansion
+color 0C
+title PokeTool • Hell Mode Batch Multi-Tool
+
+:: LOG
+set "LOG=%~dp0PokeTool_%DATE:/=-%_%TIME::=-%.log"
+set "LOG=%LOG: =_%"
+set "LOG=%LOG:.=_%"
+
+:: ยกระดับแอดมิน
+>nul 2>&1 net session
+if not "%errorlevel%"=="0" (
+    powershell -NoProfile -Command ^
+      "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b
+)
+
+:MENU
+cls
+call :Banner
+echo.
+echo   [1] Network Tools
+echo   [2] Wi-Fi Password Viewer
+echo   [3] Internet Test
+echo   [4] System Info
+echo   [5] Clean Temp
+echo   [6] File Hash
+echo   [7] Quick Tools
+echo   [8] Dump SystemInfo
+echo   [9] Security Tools
+echo   [10] DNS Switcher
+echo   [11] Kill Process by Name
+echo   [12] Set Wallpaper from URL
+echo   [99] HELL MODE (Shutdown / Restart / Logoff)
+echo   [0] Exit
+echo.
+set /p CH=เลือกเมนู: 
+if "%CH%"=="1" goto NETINFO
+if "%CH%"=="2" goto WIFI
+if "%CH%"=="3" goto NETTEST
+if "%CH%"=="4" goto SYSINFO
+if "%CH%"=="5" goto CLEAN
+if "%CH%"=="6" goto HASH
+if "%CH%"=="7" goto QUICK
+if "%CH%"=="8" goto DUMPSI
+if "%CH%"=="9" goto SECURE
+if "%CH%"=="10" goto DNS
+if "%CH%"=="11" goto KILL
+if "%CH%"=="12" goto WALLPAPER
+if "%CH%"=="99" goto HELL
+if "%CH%"=="0" goto END
+goto MENU
+
+:: ---------------------------
+:SECURE
+cls & call :Banner
+echo [*] Security Tools
+echo   1) Run Windows Defender Quick Scan
+echo   2) Toggle Firewall (On/Off)
+echo   3) Back
+set /p S=เลือก: 
+if "%S%"=="1" start powershell -Command "Start-MpScan -ScanType QuickScan"
+if "%S%"=="2" (
+  netsh advfirewall set allprofiles state off
+  echo Firewall OFF
+  timeout /t 2
+  netsh advfirewall set allprofiles state on
+  echo Firewall ON
+  timeout /t 2
+)
+goto MENU
+
+:: ---------------------------
+:DNS
+cls & call :Banner
+echo [*] Turbo DNS Switcher
+echo   1) Google DNS (8.8.8.8 / 8.8.4.4)
+echo   2) Cloudflare DNS (1.1.1.1 / 1.0.0.1)
+echo   3) Default (DHCP)
+set /p D=เลือก: 
+if "%D%"=="1" netsh interface ip set dns name="Wi-Fi" static 8.8.8.8
+if "%D%"=="1" netsh interface ip add dns name="Wi-Fi" 8.8.4.4 index=2
+if "%D%"=="2" netsh interface ip set dns name="Wi-Fi" static 1.1.1.1
+if "%D%"=="2" netsh interface ip add dns name="Wi-Fi" 1.0.0.1 index=2
+if "%D%"=="3" netsh interface ip set dns name="Wi-Fi" dhcp
+goto MENU
+
+:: ---------------------------
+:KILL
+cls & call :Banner
+set /p PROC=พิมพ์ชื่อ process เช่น chrome.exe: 
+if not defined PROC goto MENU
+taskkill /f /im "%PROC%"
+goto MENU
+
+:: ---------------------------
+:WALLPAPER
+cls & call :Banner
+set /p URL=ใส่ลิ้งค์รูปภาพ (jpg/png): 
+if not defined URL goto MENU
+
+set "IMG=%TEMP%\poke_wall.jpg"
+powershell -Command "(New-Object Net.WebClient).DownloadFile('%URL%','%IMG%')"
+
+:: ตั้งวอลเปเปอร์ (Registry + ส่ง WM_SETTINGCHANGE)
+reg add "HKCU\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "%IMG%" /f
+RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
+
+echo [✓] ตั้งวอลเปเปอร์เรียบร้อย: %IMG%
+pause
+goto MENU
+
+:: ---------------------------
+:HELL
+cls & call :Banner
+echo ⚠ HELL MODE ⚠
+echo   1) Shutdown NOW
+echo   2) Restart NOW
+echo   3) Logoff
+echo   4) Blue Screen (simulate crash)
+echo   5) Back
+set /p H=เลือก: 
+if "%H%"=="1" shutdown /s /t 0
+if "%H%"=="2" shutdown /r /t 0
+if "%H%"=="3" shutdown /l
+if "%H%"=="4" (
+   echo [*] WARNING: กำลังเรียก BSOD จำลอง
+   powershell -Command "Stop-Process -Name svchost -Force"
+)
+goto MENU
+
+:: ---------------------------
+:Banner
+echo.
+echo  ╔═══════════════════════════════════════════════╗
+echo  ║         P O K E T O O L   •   HELL MODE        ║
+echo  ║    Batch Multi-Tool — เท่ & โหดที่สุดแล้ว     ║
+echo  ╚═══════════════════════════════════════════════╝
+goto :eof
+
+:END
+echo ปิดโปรแกรม...
+exit /b
