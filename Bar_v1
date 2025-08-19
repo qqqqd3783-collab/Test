@@ -1,0 +1,451 @@
+@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+:: =========================
+:: PokeTool.bat  —  Cool Multi-Tool
+:: =========================
+
+:: ---- สี & ชื่อหน้าต่าง ----
+color 0B
+title PokeTool • Batch Multi-Tool
+
+:: ---- ตำแหน่งไฟล์ Log ----
+set "LOG=%~dp0PokeTool_%DATE:/=-%_%TIME::=-%.log"
+set "LOG=%LOG: =_%"
+:: แก้เครื่องหมายที่ใช้ไม่ได้ในชื่อไฟล์เวลา
+set "LOG=%LOG:.=_%"
+set "LOG=%LOG:,=%"
+
+:: ---- ตรวจสิทธิ์แอดมิน ถ้าไม่ใช่ให้ยกระดับเอง ----
+>nul 2>&1 net session
+if not "%errorlevel%"=="0" (
+    echo [!] กำลังขอสิทธิ์ผู้ดูแลระบบ...
+    powershell -NoProfile -Command ^
+      "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b
+)
+
+:: ---- ASCII โลโก้ (เท่ๆ) ----
+cls
+call :Banner
+
+echo [i] เริ่มทำงานที่: %DATE% %TIME% > "%LOG%"
+echo [i] Log file: "%LOG%" >> "%LOG%"
+call :PauseTiny
+
+:MENU
+cls
+call :Banner
+echo.
+echo   [1] ดูข้อมูลเครือข่าย (IP ภายใน/ภายนอก, อะแดปเตอร์)
+echo   [2] ดูรหัสผ่าน Wi‑Fi ที่เคยเชื่อมต่อบนเครื่องนี้
+echo   [3] ทดสอบอินเทอร์เน็ต (Ping / Traceroute แบบย่อ)
+echo   [4] ข้อมูลระบบ (OS, เครื่อง, RAM, อุณหภูมิ CPU*ถ้ามี)
+echo   [5] ทำความสะอาดไฟล์ชั่วคราวอย่างปลอดภัย
+echo   [6] สร้างค่าแฮชไฟล์ (MD5/SHA256)
+echo   [7] เครื่องมือด่วน (เปิด Services, TaskMgr, DeviceMgr)
+echo   [8] บันทึก SystemInfo เป็นไฟล์ .txt ข้างๆโปรแกรม
+echo   [9] ออกจากโปรแกรม
+echo.
+set /p CH=เลือกเมนู [1-9]: 
+if "%CH%"=="1" goto NETINFO
+if "%CH%"=="2" goto WIFI
+if "%CH%"=="3" goto NETTEST
+if "%CH%"=="4" goto SYSINFO
+if "%CH%"=="5" goto CLEAN
+if "%CH%"=="6" goto HASH
+if "%CH%"=="7" goto QUICK
+if "%CH%"=="8" goto DUMPSI
+if "%CH%"=="9" goto END
+goto MENU
+
+:: ---------------------------
+:NETINFO
+cls & call :Banner
+echo [*] ข้อมูลเครือข่ายภายใน:
+ipconfig | findstr /R /C:"IPv4" /C:"Default Gateway"
+echo.>>"%LOG%"
+echo [NETINFO] ===== %DATE% %TIME% ===== >> "%LOG%"
+ipconfig /all >> "%LOG%"
+
+echo.
+echo [*] กำลังตรวจสอบ IP ภายนอก (WAN)...
+set "PUBLICIP="
+:: วิธี 1: ใช้ nslookup ผ่าน OpenDNS (ไม่ต้องมี curl)
+for /f "tokens=2 delims=: " %%A in ('nslookup myip.opendns.com resolver1.opendns.com ^| find "Address" ^| find /v "resolver1"') do set PUBLICIP=%%A
+
+if not defined PUBLICIP (
+  :: วิธี 2: ถ้าเครื่องมี curl (Win10+)
+  for /f "usebackq delims=" %%A in (`curl -s ifconfig.me`) do set PUBLICIP=%%A
+)
+
+if defined PUBLICIP (
+  echo [*] IP ภายนอก: %PUBLICIP%
+  echo WAN: %PUBLICIP% >> "%LOG%"
+) else (
+  echo [!] หา IP ภายนอกไม่สำเร็จ (อาจออฟไลน์หรือบล็อค DNS)
+)
+
+call :DonePause
+goto MENU
+
+:: ---------------------------
+:WIFI
+cls & call :Banner
+echo [*] โปรไฟล์ Wi‑Fi ที่เคยเชื่อมต่อ:
+for /f "tokens=* delims=" %%A in ('netsh wlan show profiles ^| findstr /I "All User Profile"') do (
+  set "line=%%A"
+  for /f "tokens=5,*" %%P in ("!line!") do (
+     set "PROF=%%Q"
+     set "PROF=!PROF:"=!"
+     echo    - !PROF!
+  )
+)
+
+echo.
+set /p SSID=พิมพ์ชื่อโปรไฟล์ที่ต้องการดูรหัส (เว้นว่างเพื่อยกเลิก): 
+if not defined SSID goto MENU
+
+echo.>>"%LOG%"
+echo [WIFI] ===== %DATE% %TIME% : %SSID% ===== >> "%LOG%"
+echo [*] รายละเอียดโปรไฟล์: %SSID%
+netsh wlan show profile name="%SSID%" key=clear | ^
+  findstr /I /R "Name Key Content Authentication Cipher" | ^
+  tee.exe "%TEMP%\wifidump.tmp" 1>nul 2>nul
+
+:: กรณีไม่มี tee.exe ให้ fallback
+if errorlevel 1 (
+  netsh wlan show profile name="%SSID%" key=clear | ^
+    findstr /I /R "Name Key Content Authentication Cipher" > "%TEMP%\wifidump.tmp"
+)
+
+type "%TEMP%\wifidump.tmp"
+type "%TEMP%\wifidump.tmp" >> "%LOG%"
+del /q "%TEMP%\wifidump.tmp" 2>nul
+
+echo.
+echo [หมายเหตุ] แสดงเฉพาะ Wi‑Fi ที่ "เครื่องนี้" เคยเชื่อมต่อเท่านั้น
+call :DonePause
+goto MENU
+
+:: ---------------------------
+:NETTEST
+cls & call :Banner
+set "HOST=8.8.8.8"
+set /p HOST=โฮสต์/ไอพีสำหรับทดสอบ (ว่าง=8.8.8.8): 
+if not defined HOST set "HOST=8.8.8.8"
+
+echo [*] Ping แบบย่อไปที่ %HOST% ...
+ping -n 4 %HOST% | findstr /I "TTL= time="
+
+echo.
+echo [*] Traceroute แบบย่อ (5 hop):
+tracert -d -h 5 %HOST%
+
+echo.>>"%LOG%"
+echo [NETTEST] ===== %DATE% %TIME% to %HOST% ===== >> "%LOG%"
+ping -n 4 %HOST% >> "%LOG%"
+tracert -d -h 5 %HOST% >> "%LOG%"
+
+call :DonePause
+goto MENU
+
+:: ---------------------------
+:SYSINFO
+cls & call :Banner
+echo [*] เวอร์ชัน Windows:
+ver
+echo.
+echo [*] System Info (ย่อ):
+for /f "tokens=1,* delims=:" %%A in ('systeminfo ^| findstr /B /C:"OS Name" /C:"OS Version" /C:"System Type" /C:"Total Physical Memory"') do @echo    %%A:%%B
+echo.
+echo [*] CPU / RAM / เมนบอร์ด (WMIC):
+wmic cpu get name
+wmic MEMORYCHIP get Capacity,Speed,Manufacturer /format:list | more
+wmic baseboard get Product,Manufacturer,Version,SerialNumber
+
+:: อุณหภูมิ CPU (บางเครื่องอาจไม่รองรับ)
+echo.
+echo [*] เซ็นเซอร์ WMI (ถ้ามี):
+wmic /namespace:\\root\wmi PATH MSAcpi_ThermalZoneTemperature get CurrentTemperature 2>nul | more
+@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+:: =========================
+:: PokeTool.bat  —  Cool Multi-Tool
+:: =========================
+
+:: ---- สี & ชื่อหน้าต่าง ----
+color 0B
+title PokeTool • Batch Multi-Tool
+
+:: ---- ตำแหน่งไฟล์ Log ----
+set "LOG=%~dp0PokeTool_%DATE:/=-%_%TIME::=-%.log"
+set "LOG=%LOG: =_%"
+:: แก้เครื่องหมายที่ใช้ไม่ได้ในชื่อไฟล์เวลา
+set "LOG=%LOG:.=_%"
+set "LOG=%LOG:,=%"
+
+:: ---- ตรวจสิทธิ์แอดมิน ถ้าไม่ใช่ให้ยกระดับเอง ----
+>nul 2>&1 net session
+if not "%errorlevel%"=="0" (
+    echo [!] กำลังขอสิทธิ์ผู้ดูแลระบบ...
+    powershell -NoProfile -Command ^
+      "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b
+)
+
+:: ---- ASCII โลโก้ (เท่ๆ) ----
+cls
+call :Banner
+
+echo [i] เริ่มทำงานที่: %DATE% %TIME% > "%LOG%"
+echo [i] Log file: "%LOG%" >> "%LOG%"
+call :PauseTiny
+
+:MENU
+cls
+call :Banner
+echo.
+echo   [1] ดูข้อมูลเครือข่าย (IP ภายใน/ภายนอก, อะแดปเตอร์)
+echo   [2] ดูรหัสผ่าน Wi‑Fi ที่เคยเชื่อมต่อบนเครื่องนี้
+echo   [3] ทดสอบอินเทอร์เน็ต (Ping / Traceroute แบบย่อ)
+echo   [4] ข้อมูลระบบ (OS, เครื่อง, RAM, อุณหภูมิ CPU*ถ้ามี)
+echo   [5] ทำความสะอาดไฟล์ชั่วคราวอย่างปลอดภัย
+echo   [6] สร้างค่าแฮชไฟล์ (MD5/SHA256)
+echo   [7] เครื่องมือด่วน (เปิด Services, TaskMgr, DeviceMgr)
+echo   [8] บันทึก SystemInfo เป็นไฟล์ .txt ข้างๆโปรแกรม
+echo   [9] ออกจากโปรแกรม
+echo.
+set /p CH=เลือกเมนู [1-9]: 
+if "%CH%"=="1" goto NETINFO
+if "%CH%"=="2" goto WIFI
+if "%CH%"=="3" goto NETTEST
+if "%CH%"=="4" goto SYSINFO
+if "%CH%"=="5" goto CLEAN
+if "%CH%"=="6" goto HASH
+if "%CH%"=="7" goto QUICK
+if "%CH%"=="8" goto DUMPSI
+if "%CH%"=="9" goto END
+goto MENU
+
+:: ---------------------------
+:NETINFO
+cls & call :Banner
+echo [*] ข้อมูลเครือข่ายภายใน:
+ipconfig | findstr /R /C:"IPv4" /C:"Default Gateway"
+echo.>>"%LOG%"
+echo [NETINFO] ===== %DATE% %TIME% ===== >> "%LOG%"
+ipconfig /all >> "%LOG%"
+
+echo.
+echo [*] กำลังตรวจสอบ IP ภายนอก (WAN)...
+set "PUBLICIP="
+:: วิธี 1: ใช้ nslookup ผ่าน OpenDNS (ไม่ต้องมี curl)
+for /f "tokens=2 delims=: " %%A in ('nslookup myip.opendns.com resolver1.opendns.com ^| find "Address" ^| find /v "resolver1"') do set PUBLICIP=%%A
+
+if not defined PUBLICIP (
+  :: วิธี 2: ถ้าเครื่องมี curl (Win10+)
+  for /f "usebackq delims=" %%A in (`curl -s ifconfig.me`) do set PUBLICIP=%%A
+)
+
+if defined PUBLICIP (
+  echo [*] IP ภายนอก: %PUBLICIP%
+  echo WAN: %PUBLICIP% >> "%LOG%"
+) else (
+  echo [!] หา IP ภายนอกไม่สำเร็จ (อาจออฟไลน์หรือบล็อค DNS)
+)
+
+call :DonePause
+goto MENU
+
+:: ---------------------------
+:WIFI
+cls & call :Banner
+echo [*] โปรไฟล์ Wi‑Fi ที่เคยเชื่อมต่อ:
+for /f "tokens=* delims=" %%A in ('netsh wlan show profiles ^| findstr /I "All User Profile"') do (
+  set "line=%%A"
+  for /f "tokens=5,*" %%P in ("!line!") do (
+     set "PROF=%%Q"
+     set "PROF=!PROF:"=!"
+     echo    - !PROF!
+  )
+)
+
+echo.
+set /p SSID=พิมพ์ชื่อโปรไฟล์ที่ต้องการดูรหัส (เว้นว่างเพื่อยกเลิก): 
+if not defined SSID goto MENU
+
+echo.>>"%LOG%"
+echo [WIFI] ===== %DATE% %TIME% : %SSID% ===== >> "%LOG%"
+echo [*] รายละเอียดโปรไฟล์: %SSID%
+netsh wlan show profile name="%SSID%" key=clear | ^
+  findstr /I /R "Name Key Content Authentication Cipher" | ^
+  tee.exe "%TEMP%\wifidump.tmp" 1>nul 2>nul
+
+:: กรณีไม่มี tee.exe ให้ fallback
+if errorlevel 1 (
+  netsh wlan show profile name="%SSID%" key=clear | ^
+    findstr /I /R "Name Key Content Authentication Cipher" > "%TEMP%\wifidump.tmp"
+)
+
+type "%TEMP%\wifidump.tmp"
+type "%TEMP%\wifidump.tmp" >> "%LOG%"
+del /q "%TEMP%\wifidump.tmp" 2>nul
+
+echo.
+echo [หมายเหตุ] แสดงเฉพาะ Wi‑Fi ที่ "เครื่องนี้" เคยเชื่อมต่อเท่านั้น
+call :DonePause
+goto MENU
+
+:: ---------------------------
+:NETTEST
+cls & call :Banner
+set "HOST=8.8.8.8"
+set /p HOST=โฮสต์/ไอพีสำหรับทดสอบ (ว่าง=8.8.8.8): 
+if not defined HOST set "HOST=8.8.8.8"
+
+echo [*] Ping แบบย่อไปที่ %HOST% ...
+ping -n 4 %HOST% | findstr /I "TTL= time="
+
+echo.
+echo [*] Traceroute แบบย่อ (5 hop):
+tracert -d -h 5 %HOST%
+
+echo.>>"%LOG%"
+echo [NETTEST] ===== %DATE% %TIME% to %HOST% ===== >> "%LOG%"
+ping -n 4 %HOST% >> "%LOG%"
+tracert -d -h 5 %HOST% >> "%LOG%"
+
+call :DonePause
+goto MENU
+
+:: ---------------------------
+:SYSINFO
+cls & call :Banner
+echo [*] เวอร์ชัน Windows:
+ver
+echo.
+echo [*] System Info (ย่อ):
+for /f "tokens=1,* delims=:" %%A in ('systeminfo ^| findstr /B /C:"OS Name" /C:"OS Version" /C:"System Type" /C:"Total Physical Memory"') do @echo    %%A:%%B
+echo.
+echo [*] CPU / RAM / เมนบอร์ด (WMIC):
+wmic cpu get name
+wmic MEMORYCHIP get Capacity,Speed,Manufacturer /format:list | more
+wmic baseboard get Product,Manufacturer,Version,SerialNumber
+
+:: อุณหภูมิ CPU (บางเครื่องอาจไม่รองรับ)
+echo.
+echo [*] เซ็นเซอร์ WMI (ถ้ามี):
+wmic /namespace:\\root\wmi PATH MSAcpi_ThermalZoneTemperature get CurrentTemperature 2>nul | more
+
+echo.>>"%LOG%"
+echo [SYSINFO] ===== %DATE% %TIME% ===== >> "%LOG%"
+systeminfo >> "%LOG%"
+
+call :DonePause
+goto MENU
+
+:: ---------------------------
+:CLEAN
+cls & call :Banner
+echo [*] ทำความสะอาดไฟล์ชั่วคราวอย่างปลอดภัย...
+echo     - %TEMP%
+echo     - %WINDIR%\Temp
+echo.
+set /p OK=ยืนยันลบไฟล์ชั่วคราวทั้งหมด? (Y/N): 
+if /I not "%OK%"=="Y" goto MENU
+
+echo กำลังลบ... (บางไฟล์อาจถูกระบบล็อค)
+del /s /q "%TEMP%\*" 2>nul
+for /d %%D in ("%TEMP%\*") do rd /s /q "%%D" 2>nul
+
+del /s /q "%WINDIR%\Temp\*" 2>nul
+for /d %%D in ("%WINDIR%\Temp\*") do rd /s /q "%%D" 2>nul
+
+echo.>>"%LOG%"
+echo [CLEAN] ===== %DATE% %TIME% ===== >> "%LOG%"
+echo ทำความสะอาด TEMP แล้ว >> "%LOG%"
+
+call :DonePause
+goto MENU
+
+:: ---------------------------
+:HASH
+cls & call :Banner
+set "ALG=SHA256"
+echo [*] สร้างค่าแฮชไฟล์ (MD5 หรือ SHA256)
+set /p FILE=ลากไฟล์มาวางหรือพิมพ์พาธไฟล์: 
+if not defined FILE goto MENU
+set /p ALG=อัลกอริทึม (ว่าง=SHA256, อื่น=MD5/SHA256): 
+if /I "%ALG%"=="" set "ALG=SHA256"
+
+echo.
+echo [*] คำนวณแฮชด้วย %ALG% ...
+certutil -hashfile "%FILE%" %ALG%
+
+echo.>>"%LOG%"
+echo [HASH] ===== %DATE% %TIME% ===== >> "%LOG%"
+echo FILE: %FILE% ALG: %ALG% >> "%LOG%"
+for /f "tokens=* delims=" %%H in ('certutil -hashfile "%FILE%" %ALG% ^| findstr /R "^[0-9A-F]"') do echo HASH: %%H>>"%LOG%"
+
+call :DonePause
+goto MENU
+
+:: ---------------------------
+:QUICK
+cls & call :Banner
+echo [*] เปิดเครื่องมือระบบที่ใช้บ่อย:
+echo     1) Services.msc
+echo     2) Task Manager
+echo     3) Device Manager
+echo     4) Windows Firewall (Advanced)
+echo     5) Power Options
+echo     6) กลับเมนูหลัก
+set /p Q=เลือก [1-6]: 
+if "%Q%"=="1" start services.msc
+if "%Q%"=="2" start taskmgr
+if "%Q%"=="3" start devmgmt.msc
+if "%Q%"=="4" start wf.msc
+if "%Q%"=="5" control.exe powercfg.cpl
+goto MENU
+
+:: ---------------------------
+:DUMPSI
+cls & call :Banner
+set "OUT=%~dp0SystemInfo_%DATE:/=-%.txt"
+set "OUT=%OUT: =_%"
+echo [*] กำลังบันทึกข้อมูลระบบไปที่:
+echo     %OUT%
+systeminfo > "%OUT%"
+echo เสร็จแล้ว.
+echo.>>"%LOG%"
+echo [DUMP] ===== %DATE% %TIME% : %OUT% ===== >> "%LOG%"
+call :DonePause
+goto MENU
+
+:: ---------------------------
+:Banner
+echo.
+echo  ╔══════════════════════════════════════════════════════╗
+echo  ║                     P O K E T O O L                  ║
+echo  ║                Windows Batch Multi‑Tool              ║
+echo  ╚══════════════════════════════════════════════════════╝
+goto :eof
+
+:PauseTiny
+>nul ping -n 2 127.0.0.1
+goto :eof
+
+:DonePause
+echo.
+echo --------------------------------------------------------
+echo [✓] เสร็จสิ้น — กดปุ่มใดๆ เพื่อกลับเมนูหลัก
+pause >nul
+goto :eof
+
+:END
+echo.
+echo [*] ปิดโปรแกรม... บันทึก Log ไว้ที่:
+echo     "%LOG%"
+>nul ping -n 2 127.0.0.1
+endlocal
+exit /b
